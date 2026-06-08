@@ -132,7 +132,7 @@ export function ApiStatus() {
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="robots" content="index, follow" />
-        <link rel="canonical" href="https://replace domain .com/api" />
+        <link rel="canonical" href="https://futurelog-delta.vercel.app/api" />
       </Helmet>
 
       <header className="mb-12 text-center">
