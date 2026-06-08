@@ -7,11 +7,12 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Calendar, Clock, ArrowLeft, Check, Copy, Share2, Info, CheckCircle2, AlertTriangle, XCircle, Lightbulb, HelpCircle } from 'lucide-react';
+import { Calendar, Clock, ArrowLeft, Check, Copy, Share2, Info, CheckCircle2, AlertTriangle, XCircle, Lightbulb, HelpCircle, Link2 } from 'lucide-react';
 import { format } from 'date-fns';
 import React from 'react';
 import { getYouTubeId, getCoverUrl } from '../lib/youtube';
 import { PostCard } from '../components/PostCard';
+import { toast } from 'sonner';
 
 const CodeBlock = ({ inline, className, children, ...props }: any) => {
   const match = /language-(\w+)/.exec(className || '');
@@ -139,16 +140,46 @@ export function BlogPost() {
         setPost(data || null);
         
         if (data) {
-          const related = allPosts
-            .filter(p => p.slug !== slug && p.meta.tags?.some(tag => data.meta.tags?.includes(tag)))
-            .slice(0, 3);
-          setRelatedPosts(related);
+          // 1. Prioritize articles sharing the maximum number of same tags
+          const sortedByTags = allPosts
+            .filter(p => p.slug !== slug)
+            .map(p => {
+              const commonTags = p.meta.tags?.filter(tag => data.meta.tags?.includes(tag)) || [];
+              return { post: p, score: commonTags.length };
+            })
+            .filter(item => item.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .map(item => item.post);
+
+          // 2. Fallback to same category matches if fewer than 3 tag-matching posts
+          let suggestions = [...sortedByTags];
+          if (suggestions.length < 3) {
+            const sameCategory = allPosts
+              .filter(p => !suggestions.some(s => s.slug === p.slug) && p.slug !== slug && p.meta.category === data.meta.category);
+            suggestions.push(...sameCategory);
+          }
+
+          // 3. Fallback to any remaining recent posts
+          if (suggestions.length < 3) {
+            const fallback = allPosts
+              .filter(p => !suggestions.some(s => s.slug === p.slug) && p.slug !== slug);
+            suggestions.push(...fallback);
+          }
+
+          setRelatedPosts(suggestions.slice(0, 3));
         }
         
         setLoading(false);
       });
     }
   }, [slug]);
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    toast.success('Link copied to clipboard!', {
+      description: 'You can now share this post with fellow developers.',
+    });
+  };
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -162,8 +193,7 @@ export function BlogPost() {
         console.log('Error sharing:', err);
       }
     } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Link copied to clipboard!');
+      handleCopyLink();
     }
   };
 
@@ -263,38 +293,59 @@ export function BlogPost() {
         </ReactMarkdown>
       </div>
       
-      <div className="mt-16 pt-8 border-t border-border-strong">
-         <div className="flex flex-wrap gap-2">
-           <span className="text-sm text-text-muted mr-2 flex items-center">Tagged in:</span>
+      <div className="mt-16 pt-8 border-t border-border-strong flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+         <div className="flex flex-wrap gap-2 items-center">
+           <span className="text-sm text-text-muted mr-2 flex items-center font-mono text-xs uppercase tracking-wider">Tagged in:</span>
            {post.meta.tags?.map(tag => (
-              <span key={tag} className="text-xs text-text-muted font-medium px-2 py-1 bg-border-subtle rounded border border-border-strong hover:bg-border-strong transition-colors cursor-pointer">#{tag}</span>
+              <span key={tag} className="text-xs text-text-muted font-medium px-2.5 py-1 bg-border-subtle rounded-lg border border-border-strong hover:bg-border-strong transition-all duration-250 cursor-pointer hover:text-neon-blue">#{tag}</span>
            ))}
          </div>
+         <div className="flex items-center gap-3">
+           <button
+             onClick={handleCopyLink}
+             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-border-subtle border border-border-strong hover:bg-border-strong hover:text-neon-blue text-text-main text-sm font-medium transition-all group active:scale-95 cursor-pointer font-mono"
+             title="Copy link to clipboard"
+             id="blog-copy-link-btn"
+           >
+             <Link2 className="w-4 h-4 text-neon-blue group-hover:rotate-45 transition-transform duration-300" />
+             <span>Copy Link</span>
+           </button>
+           <button
+             onClick={handleShare}
+             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-neon-pink/10 border border-neon-pink/20 hover:bg-neon-pink/20 text-neon-pink text-sm font-medium transition-all group active:scale-95 cursor-pointer font-mono"
+             title="Share article options"
+             id="blog-share-btn"
+           >
+             <Share2 className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" />
+             <span>Share</span>
+           </button>
+         </div>
       </div>
-      
-      {relatedPosts.length > 0 && (
-        <div className="mt-20">
-          <h3 className="text-2xl font-bold tracking-tight text-text-main mb-8 border-b border-border-strong pb-4">
-            Related Posts
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {relatedPosts.map((relatedPost, i) => (
-              <PostCard key={relatedPost.slug} post={relatedPost} index={i} layout="vertical" />
-            ))}
-          </div>
-        </div>
-      )}
-      
-      <motion.button
-        onClick={handleShare}
-        whileHover={{ scale: 1.1, y: -5 }}
-        whileTap={{ scale: 0.9 }}
-        className="fixed bottom-8 right-8 p-4 bg-neon-pink text-white rounded-full shadow-[0_0_25px_rgba(240,46,101,0.5)] z-50 transition-colors hover:bg-white hover:text-neon-pink"
-        title="Share article"
-      >
-        <Share2 className="w-5 h-5" />
-      </motion.button>
     </article>
+
+    {relatedPosts.length > 0 && (
+      <div className="max-w-6xl mx-auto mt-24 px-4 sm:px-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-border-strong pb-6 mb-12">
+          <div>
+            <span className="text-xs font-semibold uppercase tracking-widest text-[#f02e65] mb-2 block">
+              Keep Reading
+            </span>
+            <h3 className="text-3xl font-extrabold tracking-tight text-text-main">
+              Related Articles
+            </h3>
+          </div>
+          <p className="text-text-muted text-sm mt-2 md:mt-0 font-mono">
+            Smarter recommendations based on your tags
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12">
+          {relatedPosts.map((relatedPost, i) => (
+            <PostCard key={relatedPost.slug} post={relatedPost} index={i} layout="vertical" />
+          ))}
+        </div>
+      </div>
+    )}
+
     </motion.div>
     </>
   );
