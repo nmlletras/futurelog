@@ -1,0 +1,76 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { parse } from 'yaml';
+
+export interface PostMeta {
+  title: string;
+  description: string;
+  date: string;
+  cover?: string;
+  tags?: string[];
+  category?: string;
+  featured?: boolean;
+}
+
+export interface Post {
+  slug: string;
+  meta: PostMeta;
+  content: string;
+  readingTime: number;
+}
+
+function calculateReadingTime(text: string): number {
+  const wordsPerMinute = 200;
+  const words = text.trim().split(/\s+/).length;
+  return Math.ceil(words / wordsPerMinute);
+}
+
+export async function getServerPosts(): Promise<Post[]> {
+  const blogDir = path.join(process.cwd(), 'blog');
+  const posts: Post[] = [];
+
+  try {
+    const files = await fs.readdir(blogDir);
+    const mdFiles = files.filter(f => f.endsWith('.md') || f.endsWith('.mdx'));
+
+    for (const file of mdFiles) {
+      const filePath = path.join(blogDir, file);
+      const rawContent = await fs.readFile(filePath, 'utf-8');
+      
+      const yamlRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
+      const match = rawContent.match(yamlRegex);
+      
+      let meta: PostMeta = {
+        title: 'Untitled',
+        description: '',
+        date: new Date().toISOString()
+      };
+      let content = rawContent;
+
+      if (match) {
+        const frontmatterStr = match[1];
+        content = match[2];
+        try {
+          const parsedMeta = parse(frontmatterStr);
+          meta = { ...meta, ...parsedMeta };
+        } catch (e) {
+          console.error(`Failed to parse frontmatter for ${file}`, e);
+        }
+      }
+
+      const slug = file.replace(/\.mdx?$/, '');
+      
+      posts.push({
+        slug,
+        meta,
+        content,
+        readingTime: calculateReadingTime(content)
+      });
+    }
+
+    return posts.sort((a, b) => new Date(b.meta.date).getTime() - new Date(a.meta.date).getTime());
+  } catch (error) {
+    console.error('Failed to read blog directory:', error);
+    return [];
+  }
+}
